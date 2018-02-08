@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en-us">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <title>Wave: data over sound in the browser</title>
+        <style>
+
+        body {
+            font-size:12px;
+            font-family: monospace;
+        }
+
+        textarea {
+            font-size:12px;
+            font-family: monospace;
+        }
+
+        div#outer {
+            width: 1000px;
+            background-color:#FFFFFF;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            margin-left: auto;
+            margin-right: auto;
+            padding: 0px;
+        }
+
+        div#header {
+            padding: 15px;
+            margin: 0px;
+            text-align: center;
+        }
+
+        div#nav {
+            width: 25%;
+            padding: 10px;
+            margin-top: 1px;
+            float: left;
+        }
+
+        div#main {
+            margin-left: 0%;
+            margin-top: 1px;
+            padding: 10px;
+        }
+
+        div#footer {
+            padding: 15px;
+            margin: 0px;
+            border-top: thin solid #000000;
+        }
+
+        .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
+        div.emscripten { text-align: center; }
+        div.emscripten_border { border: 1px solid black; }
+
+        .spinner {
+            height: 30px;
+            width: 30px;
+            margin: 0;
+            margin-top: 20px;
+            margin-left: 20px;
+            display: inline-block;
+            vertical-align: top;
+
+            -webkit-animation: rotation .8s linear infinite;
+            -moz-animation: rotation .8s linear infinite;
+            -o-animation: rotation .8s linear infinite;
+            animation: rotation 0.8s linear infinite;
+
+            border-left: 5px solid rgb(235, 235, 235);
+            border-right: 5px solid rgb(235, 235, 235);
+            border-bottom: 5px solid rgb(235, 235, 235);
+            border-top: 5px solid rgb(120, 120, 120);
+
+            border-radius: 100%;
+            background-color: rgb(189, 215, 46);
+        }
+
+        @-webkit-keyframes rotation {
+            from {-webkit-transform: rotate(0deg);}
+            to {-webkit-transform: rotate(360deg);}
+        }
+        @-moz-keyframes rotation {
+            from {-moz-transform: rotate(0deg);}
+            to {-moz-transform: rotate(360deg);}
+        }
+        @-o-keyframes rotation {
+            from {-o-transform: rotate(0deg);}
+            to {-o-transform: rotate(360deg);}
+        }
+        @keyframes rotation {
+            from {transform: rotate(0deg);}
+            to {transform: rotate(360deg);}
+        }
+
+        #status {
+            display: inline-block;
+            vertical-align: top;
+            margin-top: 30px;
+            margin-left: 20px;
+            font-weight: bold;
+            color: rgb(120, 120, 120);
+        }
+
+        #progress {
+            height: 20px;
+            width: 30px;
+        }
+
+        #output {
+            width: 100%;
+            height: 200px;
+            margin: 0 auto;
+            margin-top: 10px;
+            border-left: 0px;
+            border-right: 0px;
+            padding-left: 0px;
+            padding-right: 0px;
+            display: block;
+            background-color: black;
+            color: white;
+            font-size:10px;
+            font-family: 'Lucida Console', Monaco, monospace;
+            outline: none;
+        }
+        </style>
+    </head>
+    <body>
+        <div id="outer">
+            <div id="header">
+                <h1>Data over Sound</h1>
+                Open this page in another browser on the same or nearby device.<br>
+                Select the same Tx. Protocol and make sure to allow microphone input on the receiving end.<br>
+                Unplug your headphones and try sending some text with controls below.
+            </div>
+            <div id="main">
+                <div align=center>
+                    <b>Tx. Protocol:</b>
+                    <select id="waveConfig" onChange="selectConfig(this.value);">
+                        <option value=0 selected>Mid freq, 43B/s</option>
+                        <option value=1>Low freq, 16B/s</option>
+                        <option value=2>Low-Mid freq, 57B/s</option>
+                        <option value=3>High freq, 32B/s</option>
+                        <option value=4>Full spectrum, 150B/s</option>
+                    </select>
+                </div>
+
+                <br> <hr> <br>
+
+                <table align=center>
+                    <tr>
+                        <td width=60%>
+                            <table align=center>
+                                <tr>
+                                    <td align=left>Sample rate:</td>
+                                    <td><input id="paramSampleRate" readonly></input> Hz</td>
+                                </tr>
+                                <tr>
+                                    <td align=left>Samples per frame:</td>
+                                    <td><input id="paramSamplesPerFrame" readonly></input></td>
+                                </tr>
+                                <tr>
+                                    <td align=left>Freq. Delta:</td>
+                                    <td><input type="range" min="2" max="32" class="slider" id="paramFreqDelta" onInput="updateFreq('Delta');">
+                                        / <label id="paramFreqDeltaScroll"></label> / <label id="paramFreqDeltaHz"></label> Hz</td>
+                                </tr>
+                                <tr>
+                                    <td align=left>Freq. Start:</td>
+                                    <td><input type="range" min="2" max="1024" class="slider" id="paramFreqStart" onInput="updateFreq('Start');">
+                                        / <label id="paramFreqStartScroll"></label> / <label id="paramFreqStartHz"></label> Hz</td>
+                                </tr>
+                                <tr>
+                                    <td align=left>Freq. Check:</td>
+                                    <td><input type="range" min="2" max="1024" class="slider" id="paramFreqCheck" onInput="updateFreq('Check');">
+                                        / <label id="paramFreqCheckScroll"></label> / <label id="paramFreqCheckHz"></label> Hz</td>
+                                </tr>
+                                <tr>
+                                    <td align=left>Frames per Tx:</td>
+                                    <td><input type="range" min="2" max="8" value="4" class="slider" id="paramFramesPerTx" onInput="updateScroll('FramesPerTx');">
+                                        / <label id="paramFramesPerTxScroll"></label></td>
+                                </tr>
+                                <tr>
+                                    <td align=left>Bytes per Tx:</td>
+                                    <td><input type="range" min="1" max="32" value="8" class="slider" id="paramBytesPerTx" onInput="updateScroll('BytesPerTx');">
+                                        / <label id="paramBytesPerTxScroll"></label></td>
+                                </tr>
+                                <tr>
+                                    <td align=left>ECC bytes per Tx:</td>
+                                    <td><input type="range" min="1" max="32" value="4" class="slider" id="paramECCBytesPerTx" onInput="updateScroll('ECCBytesPerTx');">
+                                        / <label id="paramECCBytesPerTxScroll"></label></td>
+                                </tr>
+                                <tr>
+                                    <td align=left>Volume:</td>
+                                    <td><input type="range" min="1" max="100" value="20" class="slider" id="paramVolume" onInput="updateScroll('Volume');">
+                                        / <label id="paramVolumeScroll"></label></td>
+                                </tr>
+                                <tr>
+                                    <td colspan=2>
+                                        <div align="center">
+                                            <br> <br>
+                                            <button style="width:200px;height:100px;" onClick="Module.cwrap('setText', 'string', ['string'])(document.getElementById('txData').value);">
+                                                SEND<br><br>(start with lowered speaker volume and keep rising until you
+                                                are hearing the sound good enough)
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td>
+                            <div title="This should be less than 5 ms for good reception.">Rx data: (average Rx time = <label id="averageRxTime"></label> ms)</div>
+                            <textarea name="textarea" id="rxData" style="width:500px;height:200px;" disabled></textarea><br>
+                            <div>Tx Data:</div> <textarea name="textarea" id="txData" style="width:500px;height:200px;"></textarea><br>
+                        </td>
+                    </tr>
+                </table>
+
+                <br>
+
+            </div>
+            <div id="footer">
+                <p>Standard output:</p>
+                <textarea id="output" rows="8"></textarea>
+
+                <div class="spinner" id='spinner'></div>
+                <div class="emscripten" id="status">Downloading...</div>
+
+                <div class="emscripten">
+                    <progress value="0" max="100" id="progress" hidden=1></progress>
+                </div>
+            </div>
+
+        </div>
+
+        <script type='text/javascript'>
+
+            function getHzPerFrame() {
+                return paramSampleRate.value/paramSamplesPerFrame.value;
+            }
+
+function updateScroll(sName) {
+    val = document.getElementById('param'+sName).value;
+    document.getElementById('param'+sName+'Scroll').innerHTML = val;
+
+    Module.cwrap('setParameters','',['number','number','number','number','number','number','number'])(
+        paramFreqDelta.value,
+        paramFreqStart.value,
+        paramFreqCheck.value,
+        paramFramesPerTx.value,
+        paramBytesPerTx.value,
+        paramECCBytesPerTx.value,
+        paramVolume.value);
+}
+
+function updateFreq(fName) {
+    val = document.getElementById('paramFreq'+fName).value;
+    document.getElementById('paramFreq'+fName+'Scroll').innerHTML = val;
+    document.getElementById('paramFreq'+fName+'Hz').innerHTML = (val*getHzPerFrame()).toFixed(3);
+
+    Module.cwrap('setParameters','',['number','number','number','number','number','number','number'])(
+        paramFreqDelta.value,
+        paramFreqStart.value,
+        paramFreqCheck.value,
+        paramFramesPerTx.value,
+        paramBytesPerTx.value,
+        paramECCBytesPerTx.value,
+        paramVolume.value);
+}
+
+function selectConfig(configId) {
+    if (configId == 0) {
+        paramSampleRate.value = 44100;
+        paramSamplesPerFrame.value = 1024;
+
+        paramFreqDelta.value = 3;   updateFreq('Delta');
+        paramFreqStart.value = 140; updateFreq('Start');
+        paramFreqCheck.value = 342; updateFreq('Check');
+
+        paramFramesPerTx.value = 4;   updateScroll('FramesPerTx');
+        paramBytesPerTx.value = 8;    updateScroll('BytesPerTx');
+        paramECCBytesPerTx.value = 4; updateScroll('ECCBytesPerTx');
+    }
+
+    if (configId == 1) {
+        paramSampleRate.value = 44100;
+        paramSamplesPerFrame.value = 1024;
+
+        paramFreqDelta.value = 2;   updateFreq('Delta');
+        paramFreqStart.value = 60;  updateFreq('Start');
+        paramFreqCheck.value = 126; updateFreq('Check');
+
+        paramFramesPerTx.value = 8;   updateScroll('FramesPerTx');
+        paramBytesPerTx.value = 4;    updateScroll('BytesPerTx');
+        paramECCBytesPerTx.value = 1; updateScroll('ECCBytesPerTx');
+    }
+
+    if (configId == 2) {
+        paramSampleRate.value = 44100;
+        paramSamplesPerFrame.value = 1024;
+
+        paramFreqDelta.value = 2;   updateFreq('Delta');
+        paramFreqStart.value = 40;  updateFreq('Start');
+        paramFreqCheck.value = 237; updateFreq('Check');
+
+        paramFramesPerTx.value = 6;   updateScroll('FramesPerTx');
+        paramBytesPerTx.value = 12;   updateScroll('BytesPerTx');
+        paramECCBytesPerTx.value = 4; updateScroll('ECCBytesPerTx');
+    }
+
+    if (configId == 3) {
+        paramSampleRate.value = 44100;
+        paramSamplesPerFrame.value = 1024;
+
+        paramFreqDelta.value = 4;   updateFreq('Delta');
+        paramFreqStart.value = 243; updateFreq('Start');
+        paramFreqCheck.value = 374; updateFreq('Check');
+
+        paramFramesPerTx.value = 4;   updateScroll('FramesPerTx');
+        paramBytesPerTx.value = 4;    updateScroll('BytesPerTx');
+        paramECCBytesPerTx.value = 1; updateScroll('ECCBytesPerTx');
+    }
+
+    if (configId == 4) {
+        paramSampleRate.value = 44100;
+        paramSamplesPerFrame.value = 1024;
+
+        paramFreqDelta.value = 2;   updateFreq('Delta');
+        paramFreqStart.value = 52;  updateFreq('Start');
+        paramFreqCheck.value = 347; updateFreq('Check');
+
+        paramFramesPerTx.value = 4;   updateScroll('FramesPerTx');
+        paramBytesPerTx.value = 18;   updateScroll('BytesPerTx');
+        paramECCBytesPerTx.value = 4; updateScroll('ECCBytesPerTx');
+    }
+
+    Module.cwrap('setParameters','',['number','number','number','number','number','number','number'])(
+        paramFreqDelta.value,
+        paramFreqStart.value,
+        paramFreqCheck.value,
+        paramFramesPerTx.value,
+        paramBytesPerTx.value,
+        paramECCBytesPerTx.value,
+        paramVolume.value);
+}
+
+function getAverageRxTime() {
+    document.getElementById('averageRxTime').innerHTML = Module.cwrap('getAverageRxTime_ms', 'number', [''])().toFixed(2);
+}
+
+function getRxData() {
+    document.getElementById('rxData').innerHTML = Module.cwrap('getText', 'string', [''])();
+}
+
+function getSampleRate() {
+    paramSampleRate.value = Module.cwrap('getSampleRate', 'number', [''])();
+}
+
+var statusElement = document.getElementById('status');
+var progressElement = document.getElementById('progress');
+var spinnerElement = document.getElementById('spinner');
+
+var Module = {
+    doNotCaptureKeyboard: true,
+    preRun: [ (function() {
+        setInterval(getAverageRxTime, 100);
+        setInterval(getRxData, 100);
+        setInterval(getSampleRate, 1000);
+        waveConfig.value=0;
+        selectConfig(0);
+
+        txData.value=
+            "This is the data to be transmitted.\n" +
+            "Press the Send button to send this message.\n";
+    }) ],
+    postRun: [],
+    print: (function() {
+        var element = document.getElementById('output');
+        if (element) element.value = ''; // clear browser cache
+        return function(text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+            // These replacements are necessary if you render to raw HTML
+            //text = text.replace(/&/g, "&amp;");
+            //text = text.replace(/</g, "&lt;");
+            //text = text.replace(/>/g, "&gt;");
+            //text = text.replace('\n', '<br>', 'g');
+            console.log(text);
+            if (element) {
+                element.value += text + "\n";
+                element.scrollTop = element.scrollHeight; // focus on bottom
+            }
+        };
+    })(),
+    printErr: function(text) {
+        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+        if (0) { // XXX disabled for safety typeof dump == 'function') {
+            dump(text + '\n'); // fast, straight to the real console
+        } else {
+            console.error(text);
+        }
+    },
+    setStatus: function(text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+        if (text === Module.setStatus.text) return;
+        var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+        var now = Date.now();
+        if (m && now - Date.now() < 30) return; // if this is a progress update, skip it if too soon
+        if (m) {
+            text = m[1];
+            progressElement.value = parseInt(m[2])*100;
+            progressElement.max = parseInt(m[4])*100;
+            progressElement.hidden = false;
+            spinnerElement.hidden = false;
+        } else {
+            progressElement.value = null;
+            progressElement.max = null;
+            progressElement.hidden = true;
+            if (!text) spinnerElement.style.display = 'none';
+        }
+        statusElement.innerHTML = text;
+    },
+    totalDependencies: 0,
+    monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+    }
+};
+Module.setStatus('Downloading...');
+window.onerror = function(event) {
+    // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
+    Module.setStatus('Exception thrown, see JavaScript console');
+    spinnerElement.style.display = 'none';
+    Module.setStatus = function(text) {
+        if (text) Module.printErr('[post-exception status] ' + text);
+    };
+};
+        </script>
+        <script async type="text/javascript" src="wave.js"></script>
+    </body>
+</html>
